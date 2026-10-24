@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Afro-FetalNet</title>
+<meta name="description" content="Fetal ultrasound plane classification for low-resource African clinical settings: domain shift, LOCO fine-tuning, model soup and an offline inference server.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #16181d;
+    --muted: #6b7079;
+    --rule: #e6e6e3;
+    --paper: #ffffff;
+    --soft: #f7f7f5;
+    --spain: #5b7083;
+    --africa: #d4622a;
+    --max: 1040px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.65 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration-color: var(--africa); text-underline-offset: 3px; }
+  a:hover { color: var(--africa); }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+
+  /* Navigation */
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.92);
+        backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 56px; gap: 16px; }
+  .brand { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 18px; text-decoration: none; }
+  .brand span { color: var(--africa); }
+  nav ul { list-style: none; display: flex; gap: 22px; margin: 0; padding: 0; font-size: 14px; color: var(--muted); }
+  nav ul a { text-decoration: none; }
+
+  /* Ultrasound images: shown as-is, no cropping or masking */
+  .scan { margin: 0; }
+  .scan img { width: 100%; height: auto; display: block; border-radius: 4px; background: #000; }
+
+  /* Hero */
+  header.hero { padding: 72px 0 40px; }
+  .hero .top { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; }
+  .eyebrow { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--africa); font-weight: 600; }
+  h1 { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: clamp(44px, 7vw, 76px);
+       line-height: 1.02; margin: 10px 0 18px; letter-spacing: -0.02em; }
+  .lede { font-size: 19px; color: #3b3f46; max-width: 34em; margin: 0 0 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-block; padding: 10px 18px; border: 1.5px solid var(--ink); border-radius: 999px;
+         text-decoration: none; font-weight: 500; font-size: 15px; }
+  .btn.solid { background: var(--ink); color: #fff; }
+  .btn.solid:hover { background: var(--africa); border-color: var(--africa); color: #fff; }
+  .hero-scans { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; align-items: start; }
+  .hero-scans figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* Stat strip */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink);
+           border-bottom: 1px solid var(--rule); margin: 24px 0 0; }
+  .stat { padding: 22px 18px 20px 0; }
+  .stat + .stat { padding-left: 18px; border-left: 1px solid var(--rule); }
+  .stat b { display: block; font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 40px; line-height: 1; }
+  .stat span { font-size: 14px; color: var(--muted); }
+
+  /* Sections */
+  section { padding: 84px 0 0; }
+  .num { font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--africa); }
+  h2 { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: clamp(30px, 4vw, 40px);
+       line-height: 1.12; margin: 6px 0 14px; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+  .intro { color: #3b3f46; max-width: 44em; margin: 0 0 34px; font-size: 17px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .card { border: 1px solid var(--rule); border-radius: 14px; padding: 24px; background: #fff; }
+  .caption { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .key { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-bottom: 12px; flex-wrap: wrap; }
+  .key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* SVG chart text */
+  .wl { margin: 0 0 8px; font-size: 14px; color: #3b3f46; }
+  .wl b { color: var(--ink); }
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  svg text { font-family: Inter, system-ui, sans-serif; fill: var(--ink); }
+  svg .lbl { font-size: 12px; font-weight: 500; }
+  svg .note, svg .tick { font-size: 12px; fill: var(--muted); }
+  svg .axis { font-size: 12px; fill: var(--muted); }
+  svg .grid { stroke: var(--rule); stroke-width: 1; }
+  svg .dot { fill: var(--spain); fill-opacity: 0.25; stroke: var(--spain); stroke-width: 1.5; }
+  svg .dot.hero { fill: var(--africa); fill-opacity: 0.9; stroke: var(--africa); }
+  svg .plbl { font-size: 13px; fill: #3b3f46; }
+  svg .plbl.hero { font-weight: 600; fill: var(--africa); }
+  svg .cls { font-size: 14px; font-weight: 500; }
+  svg .val { font-size: 13px; fill: var(--muted); }
+  svg .big { font-family: Fraunces, Georgia, serif; font-size: 22px; font-weight: 600; }
+
+  /* Countries */
+  .countries { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; margin-top: 36px; align-items: end; }
+  .country p { margin: 10px 0 0; text-align: center; font-size: 14px; font-weight: 500; }
+  .country small { display: block; text-align: center; color: var(--muted); font-size: 12px; }
+  .country.test p { color: var(--africa); }
+
+  /* Pipeline */
+  .pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; counter-reset: step; }
+  .step { position: relative; padding: 20px 18px 0 0; border-top: 2px solid var(--ink); }
+  .step::before { counter-increment: step; content: "0" counter(step);
+                  font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--africa);
+                  position: absolute; top: -26px; left: 0; }
+  .step::after { content: ""; position: absolute; top: -6px; left: 0; width: 10px; height: 10px;
+                 border-radius: 50%; background: #fff; border: 2px solid var(--ink); }
+  .step h3 { margin-bottom: 6px; }
+  .step p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* Image comparison */
+  .pairs { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 10px 14px; align-items: center; }
+  .pairs .head { font-size: 13px; font-weight: 600; text-align: center; }
+  .pairs .head.sp { color: var(--spain); } .pairs .head.af { color: var(--africa); }
+  .pairs .rowlbl { font-size: 13px; font-weight: 500; text-align: right; }
+
+  /* Confusion matrix */
+  .cm { display: grid; grid-template-columns: 80px repeat(3, 1fr); gap: 4px; font-size: 13px; max-width: 360px; }
+  .cm div { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+  .cm .h { aspect-ratio: auto; color: var(--muted); padding: 4px 0; }
+  .cm .r { aspect-ratio: auto; justify-content: flex-end; padding-right: 8px; font-weight: 500; }
+  .cm .hit { background: var(--africa); color: #fff; font-family: Fraunces, Georgia, serif; font-size: 26px; font-weight: 600; }
+  .cm .miss { background: #fbe6db; color: var(--africa); font-weight: 600; }
+  .cm .zero { background: var(--soft); color: #c3c5c9; }
+
+  /* Findings */
+  .findings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .finding { border-left: 3px solid var(--africa); padding: 4px 0 4px 18px; }
+  .finding b { font-family: Fraunces, Georgia, serif; font-size: 30px; font-weight: 600; display: block; line-height: 1.1; }
+  .finding p { margin: 6px 0 0; font-size: 14px; color: #3b3f46; }
+
+  /* Grad-CAM */
+  .cams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .cam .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .cam p { margin: 10px 0 0; font-size: 14px; }
+  .cam p span { color: var(--muted); font-size: 13px; }
+
+  /* Deployment */
+  .flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 6px 0 28px; }
+  .node { border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 14px; font-size: 14px; background: #fff; }
+  .node small { display: block; color: var(--muted); font-size: 12px; }
+  .node.accent { border-color: var(--africa); }
+  .arrow { flex: 1; min-width: 28px; height: 2px; background: var(--ink); position: relative; margin: 0 6px; }
+  .arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent;
+                  border-left: 7px solid var(--ink); border-right: 0; }
+  .arrow span { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 11px;
+                color: var(--muted); white-space: nowrap; font-family: "JetBrains Mono", monospace; }
+  .speed { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .speed .card b { font-family: Fraunces, Georgia, serif; font-size: 34px; font-weight: 600; display: block; line-height: 1.1; }
+  .speed .card span { color: var(--muted); font-size: 14px; }
+
+  .demo { margin: 0 0 32px; }
+  .demo video { width: 100%; height: auto; display: block; border-radius: 12px; background: #000; }
+  .demo figcaption { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .demo code { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  pre { background: var(--soft); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px;
+        overflow-x: auto; font: 13.5px/1.6 "JetBrains Mono", ui-monospace, monospace; margin: 0; }
+  pre .c { color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 600; font-size: 13px; color: var(--muted); }
+  td.n { font-variant-numeric: tabular-nums; }
+  tr.best td { font-weight: 600; }
+
+
+  @media (max-width: 860px) {
+    nav ul { display: none; }
+    .hero .top, .grid2 { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .stat:nth-child(3) { border-left: 0; padding-left: 0; }
+    .stat:nth-child(n+3) { border-top: 1px solid var(--rule); }
+    .countries { grid-template-columns: repeat(3, 1fr); }
+    .pipeline { grid-template-columns: 1fr; gap: 34px; }
+    .findings, .cams, .speed { grid-template-columns: 1fr; }
+    .flow { flex-direction: column; align-items: stretch; }
+    .arrow { width: 2px; min-width: 0; height: 30px; flex: none; margin: 4px auto; }
+    .arrow::after { right: -4px; top: auto; bottom: -1px; border: 5px solid transparent; border-top: 7px solid var(--ink); border-bottom: 0; }
+    .arrow span { top: 50%; left: 14px; transform: translateY(-50%); }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top">Afro<span>-</span>FetalNet</a>
+    <ul>
+      <li><a href="#data">Data</a></li>
+      <li><a href="#method">Method</a></li>
+      <li><a href="#shift">Domain shift</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#deploy">Demo</a></li>
+      <li><a href="https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap top">
+    <div>
+      <div class="eyebrow">Fetal ultrasound / domain adaptation</div>
+      <h1>Afro-FetalNet</h1>
+      <p class="lede">A lightweight classifier that recognises the three standard fetal ultrasound planes
+        (brain, abdomen, femur), adapted from European data to scans from five African countries,
+        and served offline at video rate.</p>
+      <div class="buttons">
+        <a class="btn solid" href="https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification">View the code</a>
+        <a class="btn" href="#results">See the results</a>
+      </div>
+    </div>
+    <div class="hero-scans">
+      <figure class="scan"><img src="assets/img/malawi_brain.jpg" alt="Brain plane, Malawi"><figcaption>brain</figcaption></figure>
+      <figure class="scan"><img src="assets/img/cam_abdomen_overlay.jpg" alt="Abdomen plane with Grad-CAM"><figcaption>abdomen, Grad-CAM</figcaption></figure>
+      <figure class="scan"><img src="assets/img/malawi_femur.jpg" alt="Femur plane, Malawi"><figcaption>femur</figcaption></figure>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat"><b>0.987</b><span>macro-F1 on unseen Malawi scans</span></div>
+      <div class="stat"><b>4.0M</b><span>parameters (EfficientNet-B0)</span></div>
+      <div class="stat"><b>130</b><span>frames per second on a T4 GPU</span></div>
+      <div class="stat"><b>31</b><span>frames per second on CPU</span></div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="problem">
+  <div class="wrap grid2">
+    <div>
+      <div class="num">01 / problem</div>
+      <h2>Models trained in one hospital fail in another.</h2>
+    </div>
+    <div>
+      <p class="intro" style="margin-bottom:0">Before any fetal measurement is taken, the sonographer has to find the right
+        standard plane. Automatic plane recognition can speed this up, but most public training data
+        comes from well-equipped European hospitals. Scanners, settings and image quality differ in
+        many African clinics, and a model that scores 96% in Spain can drop to near chance on the
+        hardest classes. This project measures that gap and closes it with very little local data.</p>
+    </div>
+  </div>
+</section>
+
+<section id="data">
+  <div class="wrap">
+    <div class="num">02 / data</div>
+    <h2>27 times more source data than target data.</h2>
+    <p class="intro">Training starts from FETAL_PLANES_DB (Spain). Adaptation and testing use a public
+      dataset from five African countries. Malawi is never used for training or model selection.</p>
+    <div class="card"><p class="wl">FETAL_PLANES_DB, Spain <b>12,400 images</b></p><svg viewBox="0 0 806 26" class="waffle" aria-hidden="true"><rect x="0" y="0" width="10" height="10" fill="#5b7083"/><rect x="13" y="0" width="10" height="10" fill="#5b7083"/><rect x="26" y="0" width="10" height="10" fill="#5b7083"/><rect x="39" y="0" width="10" height="10" fill="#5b7083"/><rect x="52" y="0" width="10" height="10" fill="#5b7083"/><rect x="65" y="0" width="10" height="10" fill="#5b7083"/><rect x="78" y="0" width="10" height="10" fill="#5b7083"/><rect x="91" y="0" width="10" height="10" fill="#5b7083"/><rect x="104" y="0" width="10" height="10" fill="#5b7083"/><rect x="117" y="0" width="10" height="10" fill="#5b7083"/><rect x="130" y="0" width="10" height="10" fill="#5b7083"/><rect x="143" y="0" width="10" height="10" fill="#5b7083"/><rect x="156" y="0" width="10" height="10" fill="#5b7083"/><rect x="169" y="0" width="10" height="10" fill="#5b7083"/><rect x="182" y="0" width="10" height="10" fill="#5b7083"/><rect x="195" y="0" width="10" height="10" fill="#5b7083"/><rect x="208" y="0" width="10" height="10" fill="#5b7083"/><rect x="221" y="0" width="10" height="10" fill="#5b7083"/><rect x="234" y="0" width="10" height="10" fill="#5b7083"/><rect x="247" y="0" width="10" height="10" fill="#5b7083"/><rect x="260" y="0" width="10" height="10" fill="#5b7083"/><rect x="273" y="0" width="10" height="10" fill="#5b7083"/><rect x="286" y="0" width="10" height="10" fill="#5b7083"/><rect x="299" y="0" width="10" height="10" fill="#5b7083"/><rect x="312" y="0" width="10" height="10" fill="#5b7083"/><rect x="325" y="0" width="10" height="10" fill="#5b7083"/><rect x="338" y="0" width="10" height="10" fill="#5b7083"/><rect x="351" y="0" width="10" height="10" fill="#5b7083"/><rect x="364" y="0" width="10" height="10" fill="#5b7083"/><rect x="377" y="0" width="10" height="10" fill="#5b7083"/><rect x="390" y="0" width="10" height="10" fill="#5b7083"/><rect x="403" y="0" width="10" height="10" fill="#5b7083"/><rect x="416" y="0" width="10" height="10" fill="#5b7083"/><rect x="429" y="0" width="10" height="10" fill="#5b7083"/><rect x="442" y="0" width="10" height="10" fill="#5b7083"/><rect x="455" y="0" width="10" height="10" fill="#5b7083"/><rect x="468" y="0" width="10" height="10" fill="#5b7083"/><rect x="481" y="0" width="10" height="10" fill="#5b7083"/><rect x="494" y="0" width="10" height="10" fill="#5b7083"/><rect x="507" y="0" width="10" height="10" fill="#5b7083"/><rect x="520" y="0" width="10" height="10" fill="#5b7083"/><rect x="533" y="0" width="10" height="10" fill="#5b7083"/><rect x="546" y="0" width="10" height="10" fill="#5b7083"/><rect x="559" y="0" width="10" height="10" fill="#5b7083"/><rect x="572" y="0" width="10" height="10" fill="#5b7083"/><rect x="585" y="0" width="10" height="10" fill="#5b7083"/><rect x="598" y="0" width="10" height="10" fill="#5b7083"/><rect x="611" y="0" width="10" height="10" fill="#5b7083"/><rect x="624" y="0" width="10" height="10" fill="#5b7083"/><rect x="637" y="0" width="10" height="10" fill="#5b7083"/><rect x="650" y="0" width="10" height="10" fill="#5b7083"/><rect x="663" y="0" width="10" height="10" fill="#5b7083"/><rect x="676" y="0" width="10" height="10" fill="#5b7083"/><rect x="689" y="0" width="10" height="10" fill="#5b7083"/><rect x="702" y="0" width="10" height="10" fill="#5b7083"/><rect x="715" y="0" width="10" height="10" fill="#5b7083"/><rect x="728" y="0" width="10" height="10" fill="#5b7083"/><rect x="741" y="0" width="10" height="10" fill="#5b7083"/><rect x="754" y="0" width="10" height="10" fill="#5b7083"/><rect x="767" y="0" width="10" height="10" fill="#5b7083"/><rect x="780" y="0" width="10" height="10" fill="#5b7083"/><rect x="793" y="0" width="10" height="10" fill="#5b7083"/><rect x="0" y="13" width="10" height="10" fill="#5b7083"/><rect x="13" y="13" width="10" height="10" fill="#5b7083"/><rect x="26" y="13" width="10" height="10" fill="#5b7083"/><rect x="39" y="13" width="10" height="10" fill="#5b7083"/><rect x="52" y="13" width="10" height="10" fill="#5b7083"/><rect x="65" y="13" width="10" height="10" fill="#5b7083"/><rect x="78" y="13" width="10" height="10" fill="#5b7083"/><rect x="91" y="13" width="10" height="10" fill="#5b7083"/><rect x="104" y="13" width="10" height="10" fill="#5b7083"/><rect x="117" y="13" width="10" height="10" fill="#5b7083"/><rect x="130" y="13" width="10" height="10" fill="#5b7083"/><rect x="143" y="13" width="10" height="10" fill="#5b7083"/><rect x="156" y="13" width="10" height="10" fill="#5b7083"/><rect x="169" y="13" width="10" height="10" fill="#5b7083"/><rect x="182" y="13" width="10" height="10" fill="#5b7083"/><rect x="195" y="13" width="10" height="10" fill="#5b7083"/><rect x="208" y="13" width="10" height="10" fill="#5b7083"/><rect x="221" y="13" width="10" height="10" fill="#5b7083"/><rect x="234" y="13" width="10" height="10" fill="#5b7083"/><rect x="247" y="13" width="10" height="10" fill="#5b7083"/><rect x="260" y="13" width="10" height="10" fill="#5b7083"/><rect x="273" y="13" width="10" height="10" fill="#5b7083"/><rect x="286" y="13" width="10" height="10" fill="#5b7083"/><rect x="299" y="13" width="10" height="10" fill="#5b7083"/><rect x="312" y="13" width="10" height="10" fill="#5b7083"/><rect x="325" y="13" width="10" height="10" fill="#5b7083"/><rect x="338" y="13" width="10" height="10" fill="#5b7083"/><rect x="351" y="13" width="10" height="10" fill="#5b7083"/><rect x="364" y="13" width="10" height="10" fill="#5b7083"/><rect x="377" y="13" width="10" height="10" fill="#5b7083"/><rect x="390" y="13" width="10" height="10" fill="#5b7083"/><rect x="403" y="13" width="10" height="10" fill="#5b7083"/><rect x="416" y="13" width="10" height="10" fill="#5b7083"/><rect x="429" y="13" width="10" height="10" fill="#5b7083"/><rect x="442" y="13" width="10" height="10" fill="#5b7083"/><rect x="455" y="13" width="10" height="10" fill="#5b7083"/><rect x="468" y="13" width="10" height="10" fill="#5b7083"/><rect x="481" y="13" width="10" height="10" fill="#5b7083"/><rect x="494" y="13" width="10" height="10" fill="#5b7083"/><rect x="507" y="13" width="10" height="10" fill="#5b7083"/><rect x="520" y="13" width="10" height="10" fill="#5b7083"/><rect x="533" y="13" width="10" height="10" fill="#5b7083"/><rect x="546" y="13" width="10" height="10" fill="#5b7083"/><rect x="559" y="13" width="10" height="10" fill="#5b7083"/><rect x="572" y="13" width="10" height="10" fill="#5b7083"/><rect x="585" y="13" width="10" height="10" fill="#5b7083"/><rect x="598" y="13" width="10" height="10" fill="#5b7083"/><rect x="611" y="13" width="10" height="10" fill="#5b7083"/><rect x="624" y="13" width="10" height="10" fill="#5b7083"/><rect x="637" y="13" width="10" height="10" fill="#5b7083"/><rect x="650" y="13" width="10" height="10" fill="#5b7083"/><rect x="663" y="13" width="10" height="10" fill="#5b7083"/><rect x="676" y="13" width="10" height="10" fill="#5b7083"/><rect x="689" y="13" width="10" height="10" fill="#5b7083"/><rect x="702" y="13" width="10" height="10" fill="#5b7083"/><rect x="715" y="13" width="10" height="10" fill="#5b7083"/><rect x="728" y="13" width="10" height="10" fill="#5b7083"/><rect x="741" y="13" width="10" height="10" fill="#5b7083"/><rect x="754" y="13" width="10" height="10" fill="#5b7083"/><rect x="767" y="13" width="10" height="10" fill="#5b7083"/><rect x="780" y="13" width="10" height="10" fill="#5b7083"/><rect x="793" y="13" width="10" height="10" fill="#5b7083"/></svg><p class="wl" style="margin-top:22px">African dataset, 5 countries <b style="color:#d4622a">450 images</b></p><svg viewBox="0 0 806 13" class="waffle" aria-hidden="true"><rect x="0" y="0" width="10" height="10" fill="#d4622a"/><rect x="13" y="0" width="10" height="10" fill="#d4622a"/><rect x="26" y="0" width="10" height="10" fill="#d4622a"/><rect x="39" y="0" width="10" height="10" fill="#d4622a"/><rect x="52" y="0" width="5.0" height="10" fill="#d4622a"/></svg><p class="caption" style="text-align:right">1 square = 100 images</p></div>
+    <div class="countries">
+      <div class="country"><div class="scan"><img src="assets/img/country_algeria.jpg" alt="Ultrasound from Algeria"></div><p>Algeria</p><small>75 images, 3 planes</small></div>
+      <div class="country"><div class="scan"><img src="assets/img/country_egypt.jpg" alt="Ultrasound from Egypt"></div><p>Egypt</p><small>75 images, 3 planes</small></div>
+      <div class="country"><div class="scan"><img src="assets/img/country_ghana.jpg" alt="Ultrasound from Ghana"></div><p>Ghana</p><small>75 images, 3 planes</small></div>
+      <div class="country"><div class="scan"><img src="assets/img/country_uganda.jpg" alt="Ultrasound from Uganda"></div><p>Uganda</p><small>75 images, 3 planes</small></div>
+      <div class="country test"><div class="scan"><img src="assets/img/country_malawi.jpg" alt="Ultrasound from Malawi"></div><p>Malawi</p><small>75 images, held-out test</small></div>
+    </div>
+    <p class="caption">Images: FETAL_PLANES_DB, Burgos-Artizzu et al. 2020 (<a href="https://zenodo.org/records/3904280">Zenodo</a>) and
+      African fetal planes, Sendra-Balcells et al. 2023 (<a href="https://zenodo.org/records/7540448">Zenodo</a>), both CC BY 4.0.</p>
+  </div>
+</section>
+
+<section id="method">
+  <div class="wrap">
+    <div class="num">03 / method</div>
+    <h2>Five steps from a Spanish model to an African one.</h2>
+    <p class="intro">Every step is a notebook in the repository, backed by tested library code.</p>
+    <div class="pipeline" style="margin-top:44px">
+      <div class="step"><h3>Curate</h3><p>Patient-level splits; Malawi held out entirely; non-standard planes mapped to "other".</p></div>
+      <div class="step"><h3>Benchmark</h3><p>Eight ImageNet backbones trained on Spain and compared on accuracy, size and speed.</p></div>
+      <div class="step"><h3>Measure the shift</h3><p>The Spanish model is tested on Malawi with no African data, with and without selective CLAHE.</p></div>
+      <div class="step"><h3>Leave one country out</h3><p>Fine-tune four times, each time validating on a different country.</p></div>
+      <div class="step"><h3>Model soup</h3><p>Average the four fold weights into one model, then explain it with Grad-CAM.</p></div>
+    </div>
+
+    <div class="grid2" style="margin-top:64px">
+      <div>
+        <h3>Choosing the backbone</h3>
+        <p class="caption" style="margin:0 0 14px">Spain test set, 4 classes, 5,271 images. Circle size shows speed (FPS).</p>
+        <svg viewBox="0 0 640 340" role="img" aria-label="Parameters versus macro-F1 for 8 architectures"><line x1="56" x2="616" y1="247.7" y2="247.7" class="grid"/><text x="48" y="251.7" class="tick" text-anchor="end">0.86</text><line x1="56" x2="616" y1="155.0" y2="155.0" class="grid"/><text x="48" y="159.0" class="tick" text-anchor="end">0.90</text><line x1="56" x2="616" y1="62.3" y2="62.3" class="grid"/><text x="48" y="66.3" class="tick" text-anchor="end">0.94</text><text x="56.0" y="314" class="tick" text-anchor="middle">0M</text><text x="242.7" y="314" class="tick" text-anchor="middle">10M</text><text x="429.3" y="314" class="tick" text-anchor="middle">20M</text><text x="616.0" y="314" class="tick" text-anchor="middle">30M</text><circle cx="97.1" cy="261.6" r="8.8" class="dot"/><text x="105.1" y="275.6" text-anchor="start" class="plbl">MobileNetV2</text><circle cx="84.0" cy="196.7" r="8.8" class="dot"/><text x="92.0" y="188.7" text-anchor="start" class="plbl">MobileNetV3-S</text><circle cx="130.7" cy="71.6" r="7.3" class="dot hero"/><text x="140.7" y="87.6" text-anchor="start" class="plbl hero">EfficientNet-B0</text><circle cx="199.7" cy="97.1" r="6.2" class="dot"/><text x="209.7" y="101.1" text-anchor="start" class="plbl">EfficientNet-B2</text><circle cx="494.7" cy="143.4" r="7.8" class="dot"/><text x="504.7" y="147.4" text-anchor="start" class="plbl">ResNet50</text><circle cx="289.3" cy="69.3" r="5.2" class="dot"/><text x="299.3" y="61.3" text-anchor="start" class="plbl">DenseNet169</text><circle cx="444.3" cy="50.8" r="8.6" class="dot"/><text x="434.3" y="40.8" text-anchor="end" class="plbl">Xception</text><circle cx="574.9" cy="189.7" r="7.3" class="dot"/><text x="564.9" y="177.7" text-anchor="end" class="plbl">ConvNeXt-T</text><text x="348.0" y="334" class="axis" text-anchor="middle">parameters</text><text x="14" y="155.0" class="axis" text-anchor="middle" transform="rotate(-90 14 155.0)">macro-F1, Spain test</text></svg>
+      </div>
+      <div>
+        <h3>Why EfficientNet-B0</h3>
+        <table>
+          <tr><th>Model</th><th>Params</th><th>FPS</th><th>F1</th></tr>
+          <tr class="best"><td>EfficientNet-B0</td><td class="n">4.0M</td><td class="n">130</td><td class="n">0.936</td></tr>
+          <tr><td>DenseNet169</td><td class="n">12.5M</td><td class="n">48</td><td class="n">0.937</td></tr>
+          <tr><td>Xception</td><td class="n">20.8M</td><td class="n">185</td><td class="n">0.945</td></tr>
+          <tr><td>EfficientNet-B2</td><td class="n">7.7M</td><td class="n">89</td><td class="n">0.925</td></tr>
+          <tr><td>MobileNetV3-Small</td><td class="n">1.5M</td><td class="n">192</td><td class="n">0.882</td></tr>
+        </table>
+        <p class="caption">Within 0.01 F1 of the best model at a fifth of its size, and fast enough for live video.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="shift">
+  <div class="wrap">
+    <div class="num">04 / domain shift</div>
+    <h2>Brains transfer. Abdomens and femurs do not.</h2>
+    <p class="intro">The Spain-trained model, applied to Malawi with no adaptation, keeps recognising
+      the skull but confuses abdomen and femur views, which look very different across scanners.</p>
+    <div class="grid2">
+      <div>
+        <div class="pairs">
+          <div></div><div class="head sp">Spain</div><div class="head af">Malawi</div>
+          <div class="rowlbl">brain</div>
+          <div class="scan"><img src="assets/img/spain_brain.jpg" alt="Spanish brain plane"></div>
+          <div class="scan"><img src="assets/img/malawi_brain.jpg" alt="Malawian brain plane"></div>
+          <div class="rowlbl">abdomen</div>
+          <div class="scan"><img src="assets/img/spain_abdomen.jpg" alt="Spanish abdomen plane"></div>
+          <div class="scan"><img src="assets/img/malawi_abdomen.jpg" alt="Malawian abdomen plane"></div>
+          <div class="rowlbl">femur</div>
+          <div class="scan"><img src="assets/img/spain_femur.jpg" alt="Spanish femur plane"></div>
+          <div class="scan"><img src="assets/img/malawi_femur.jpg" alt="Malawian femur plane"></div>
+        </div>
+      </div>
+      <div>
+        <h3>Per-class F1, zero-shot</h3>
+        <div class="key"><span><i style="background:var(--spain)"></i>Spain test</span><span><i style="background:var(--africa)"></i>Malawi</span></div>
+        <svg viewBox="0 0 560 226" role="img" aria-label="Per-class F1, Spain versus Malawi"><text x="68" y="29" class="cls" text-anchor="end">brain</text><rect x="80" y="14" width="436.5" height="12" fill="#5b7083"/><rect x="80" y="30" width="440.0" height="12" fill="#d4622a"/><text x="522.5" y="24" class="val">0.99</text><text x="526.0" y="40" class="val">1.00</text><text x="68" y="83" class="cls" text-anchor="end">abdomen</text><rect x="80" y="68" width="423.3" height="12" fill="#5b7083"/><rect x="80" y="84" width="162.8" height="12" fill="#d4622a"/><text x="509.3" y="78" class="val">0.96</text><text x="248.8" y="94" class="val">0.37</text><text x="68" y="137" class="cls" text-anchor="end">femur</text><rect x="80" y="122" width="419.3" height="12" fill="#5b7083"/><rect x="80" y="138" width="142.1" height="12" fill="#d4622a"/><text x="505.3" y="132" class="val">0.95</text><text x="228.1" y="148" class="val">0.32</text><text x="68" y="191" class="cls" text-anchor="end">other</text><rect x="80" y="176" width="403.5" height="12" fill="#5b7083"/><rect x="80" y="192" width="254.3" height="12" fill="#d4622a"/><text x="489.5" y="186" class="val">0.92</text><text x="340.3" y="202" class="val">0.58</text></svg>
+        <h3 style="margin-top:40px">Closing the gap on Malawi</h3>
+        <svg viewBox="0 0 600 230" role="img" aria-label="Macro-F1 on Malawi across steps"><line x1="40" x2="560" y1="180.0" y2="180.0" class="grid"/><polyline points="40.0,159.6 300.0,120.0 560.0,33.9" fill="none" stroke="#d4622a" stroke-width="2.5"/><circle cx="40.0" cy="159.6" r="6" fill="#fff" stroke="#d4622a" stroke-width="2.5"/><text x="40.0" y="145.6" text-anchor="start" class="big">0.568</text><text x="40.0" y="206" text-anchor="start" class="cls">Zero-shot</text><text x="40.0" y="222" text-anchor="start" class="note">4 classes</text><circle cx="300.0" cy="120.0" r="6" fill="#fff" stroke="#d4622a" stroke-width="2.5"/><text x="300.0" y="106.0" text-anchor="middle" class="big">0.700</text><text x="300.0" y="206" text-anchor="middle" class="cls">+ selective CLAHE</text><text x="300.0" y="222" text-anchor="middle" class="note">4 classes</text><circle cx="560.0" cy="33.9" r="6" fill="#fff" stroke="#d4622a" stroke-width="2.5"/><text x="560.0" y="19.9" text-anchor="end" class="big">0.987</text><text x="560.0" y="206" text-anchor="end" class="cls">LOCO + model soup</text><text x="560.0" y="222" text-anchor="end" class="note">3 classes</text></svg>
+        <p class="caption">Zero-shot and CLAHE steps use all 4 classes (n=100); the final model uses the 3 standard planes (n=75).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <div class="num">05 / results</div>
+    <h2>74 of 75 unseen scans classified correctly.</h2>
+    <p class="intro">EfficientNet-B0 after leave-one-country-out fine-tuning and weight averaging,
+      evaluated once on the held-out Malawi set (75 images, 26 patients).</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Confusion matrix</h3>
+        <div class="cm" role="table" aria-label="Confusion matrix">
+          <div class="h"></div><div class="h">brain</div><div class="h">femur</div><div class="h">abdomen</div>
+          <div class="r">brain</div><div class="hit">25</div><div class="zero">0</div><div class="zero">0</div>
+          <div class="r">femur</div><div class="miss">1</div><div class="hit">24</div><div class="zero">0</div>
+          <div class="r">abdomen</div><div class="zero">0</div><div class="zero">0</div><div class="hit">25</div>
+        </div>
+        <p class="caption">Rows: true plane. Columns: predicted plane.</p>
+      </div>
+      <div>
+        <table>
+          <tr><th>Metric</th><th>Value</th></tr>
+          <tr><td>Macro-F1</td><td class="n">0.987</td></tr>
+          <tr><td>Accuracy</td><td class="n">0.987</td></tr>
+          <tr><td>95% CI, patient-level bootstrap</td><td class="n">0.959 to 1.000</td></tr>
+          <tr><td>95% CI, image-level bootstrap</td><td class="n">0.955 to 1.000</td></tr>
+          <tr><td>Seeds 42, 1, 7</td><td class="n">0.987 each</td></tr>
+        </table>
+        <p class="caption">The patient-level interval resamples whole patients, which is the honest
+          choice when each patient contributes two or three images.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:64px">What the validation study found</h3>
+    <div class="findings" style="margin-top:18px">
+      <div class="finding"><b>1.000</b><p>F1 of a plain pooled fine-tune on all four countries. The simplest baseline matched LOCO + soup on this test set.</p></div>
+      <div class="finding"><b>0.92 to 0.96</b><p>Held-out F1 when each country takes a turn as the test set. Malawi is at the top of a tight band, not an outlier.</p></div>
+      <div class="finding"><b>1%</b><p>Share of Malawi images dark enough to trigger selective CLAHE, against 37% in the training countries.</p></div>
+    </div>
+
+    <div class="grid2" style="margin-top:48px">
+      <div>
+        <h3>Each country held out in turn</h3>
+        <svg viewBox="0 0 560 214" role="img" aria-label="Held-out F1 per country"><line x1="80.0" x2="80.0" y1="10" y2="190" class="grid"/><text x="80.0" y="208" class="tick" text-anchor="middle">0.90</text><line x1="300.0" x2="300.0" y1="10" y2="190" class="grid"/><text x="300.0" y="208" class="tick" text-anchor="middle">0.95</text><line x1="520.0" x2="520.0" y1="10" y2="190" class="grid"/><text x="520.0" y="208" class="tick" text-anchor="middle">1.00</text><line x1="241.5" x2="241.5" y1="10" y2="190" stroke="#8a8f98" stroke-dasharray="3 3"/><text x="68" y="30" class="cls" text-anchor="end">Egypt</text><line x1="80.0" x2="175.5" y1="26" y2="26" stroke="#e6e6e3" stroke-width="2"/><circle cx="175.5" cy="26" r="6" fill="#5b7083"/><text x="187.5" y="30" class="val">0.922</text><text x="68" y="64" class="cls" text-anchor="end">Ghana</text><line x1="80.0" x2="225.2" y1="60" y2="60" stroke="#e6e6e3" stroke-width="2"/><circle cx="225.2" cy="60" r="6" fill="#5b7083"/><text x="237.2" y="64" class="val">0.933</text><text x="68" y="98" class="cls" text-anchor="end">Algeria</text><line x1="80.0" x2="280.6" y1="94" y2="94" stroke="#e6e6e3" stroke-width="2"/><circle cx="280.6" cy="94" r="6" fill="#5b7083"/><text x="292.6" y="98" class="val">0.946</text><text x="68" y="132" class="cls" text-anchor="end">Uganda</text><line x1="80.0" x2="283.7" y1="128" y2="128" stroke="#e6e6e3" stroke-width="2"/><circle cx="283.7" cy="128" r="6" fill="#5b7083"/><text x="295.7" y="132" class="val">0.946</text><text x="68" y="166" class="cls" text-anchor="end">Malawi</text><line x1="80.0" x2="343.6" y1="162" y2="162" stroke="#e6e6e3" stroke-width="2"/><circle cx="343.6" cy="162" r="6" fill="#d4622a"/><text x="355.6" y="166" class="val">0.960</text></svg>
+        <p class="caption">Dashed line: mean of the four non-Malawi countries (0.937).</p>
+      </div>
+      <div>
+        <h3>Baselines on the Malawi set</h3>
+        <table>
+          <tr><th>Method</th><th>F1</th></tr>
+          <tr><td>Pooled fine-tune, no LOCO, no soup</td><td class="n">1.000</td></tr>
+          <tr><td>LOCO + weight-space model soup</td><td class="n">0.987</td></tr>
+          <tr><td>LOCO + prediction ensemble</td><td class="n">0.987</td></tr>
+        </table>
+        <p class="caption">With 75 test images, a one-image difference sits inside every confidence interval.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="explain">
+  <div class="wrap">
+    <div class="num">06 / explainability</div>
+    <h2>Where the model looks.</h2>
+    <p class="intro">Grad-CAM on held-out Malawi scans. Attention sits on the skull outline, the femur
+      shaft and the abdominal cross-section. These maps show sharpness of attention, not clinically
+      verified anatomy.</p>
+    <div class="cams">
+      <div class="cam"><div class="duo"><div class="scan"><img src="assets/img/cam_brain_image.jpg" alt="Brain plane"></div><div class="scan"><img src="assets/img/cam_brain_overlay.jpg" alt="Brain plane Grad-CAM"></div></div>
+        <p>Brain <span>concentration 0.66</span></p></div>
+      <div class="cam"><div class="duo"><div class="scan"><img src="assets/img/cam_femur_image.jpg" alt="Femur plane"></div><div class="scan"><img src="assets/img/cam_femur_overlay.jpg" alt="Femur plane Grad-CAM"></div></div>
+        <p>Femur <span>concentration 0.78</span></p></div>
+      <div class="cam"><div class="duo"><div class="scan"><img src="assets/img/cam_abdomen_image.jpg" alt="Abdomen plane"></div><div class="scan"><img src="assets/img/cam_abdomen_overlay.jpg" alt="Abdomen plane Grad-CAM"></div></div>
+        <p>Abdomen <span>concentration 0.75</span></p></div>
+    </div>
+    <p class="caption">Concentration: share of attention in the top 25% of pixels.</p>
+  </div>
+</section>
+
+<section id="deploy">
+  <div class="wrap">
+    <div class="num">07 / deployment</div>
+    <h2>Runs offline, at the bedside.</h2>
+    <p class="intro">A FastAPI server loads versioned models from a local registry and classifies
+      uploaded images, folders, or a live video stream sent over the local network. No internet
+      connection is needed once it is installed.</p>
+    <div class="flow">
+      <div class="node">Ultrasound machine<small>sender.py</small></div>
+      <div class="arrow"><span>UDP / JPEG</span></div>
+      <div class="node accent">Inference server<small>FastAPI + PyTorch</small></div>
+      <div class="arrow"><span>WebSocket</span></div>
+      <div class="node">Tablet or laptop<small>/video in a browser</small></div>
+    </div>
+    <figure class="demo">
+      <video controls muted loop playsinline preload="metadata" poster="assets/video/demo-poster.jpg">
+        <source src="assets/video/demo.mp4" type="video/mp4">
+      </video>
+      <figcaption>Live demo: one laptop streams ultrasound video with <code>sender.py</code>; the other runs the
+        inference server and labels each frame in the browser.</figcaption>
+    </figure>
+    <div class="grid2">
+      <div class="speed">
+        <div class="card"><b>7.98 ms</b><span>per frame on a T4 GPU (125 FPS)</span></div>
+        <div class="card"><b>32.6 ms</b><span>per frame on a cloud CPU (31 FPS)</span></div>
+      </div>
+      <pre><span class="c"># start the server</span>
+cd deployment
+pip install -r requirements.txt
+python run.py
+
+<span class="c"># classify a sample frame</span>
+python client.py predict \
+  --image samples/sample_frame.png \
+  --model efficientnet_b0</pre>
+    </div>
+  </div>
+</section>
+
+<section id="reproduce">
+  <div class="wrap grid2">
+    <div>
+      <div class="num">08 / reproduce</div>
+      <h2>Every number traces to a notebook.</h2>
+      <p class="intro">Seven notebooks, run in order, rebuild the data splits, the benchmarks, the
+        LOCO models and the validation study. The full guide is in
+        <a href="https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification/blob/main/docs/REPRODUCING.md">docs/REPRODUCING.md</a>
+        and all results with their sources are in
+        <a href="https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification/blob/main/docs/RESULTS.md">docs/RESULTS.md</a>.</p>
+    </div>
+    <pre><span class="c"># set up and fetch data</span>
+git clone https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification.git
+cd OBS_Ultrasound_standard_plane_classification/modelling
+pip install -r requirements.txt
+python scripts/prepare_datasets.py
+python scripts/fetch_checkpoints.py
+
+<span class="c"># run notebooks 1 to 7</span>
+jupyter lab notebooks/</pre>
+  </div>
+</section>
+
+</main>
+<div style="height:96px"></div>
+
+
+</body>
+</html>
