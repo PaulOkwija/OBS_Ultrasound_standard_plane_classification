@@ -113,6 +113,6 @@ explanations. Predictions are meant to support, never replace, a trained sonogra
   author = {Okwija, Paul},
   title  = {Afro-FetalNet: Fetal Ultrasound Plane Classification for Low-Resource African Settings},
   year   = {2026},
-  url    = {https://github.com/PaulOkwija/US_standard_plane_classification}
+  url    = {https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification}
 }
 ```

@@ -15,8 +15,8 @@ This guide walks through the modelling pipeline from an empty machine to the num
 ## 1. Set up the environment
 
 ```bash
-git clone https://github.com/PaulOkwija/US_standard_plane_classification.git
-cd US_standard_plane_classification/modelling
+git clone https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification.git
+cd OBS_Ultrasound_standard_plane_classification/modelling
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt

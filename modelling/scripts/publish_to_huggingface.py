@@ -69,7 +69,7 @@ please cite the original papers above (not this repo) when using the data.
 Downloaded and curated automatically by `src/data/hf_sync.fetch_raw_datasets()` +
 `src/data/curate.prepare_african()`/`prepare_fetal()` - see
 `modelling/scripts/prepare_datasets.py` in
-https://github.com/PaulOkwija/US_standard_plane_classification.
+https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification.
 """.format(
     fetal_filename=FETAL_FILENAME, fetal_record=FETAL_RECORD_ID,
     african_filename=AFRICAN_FILENAME, african_record=AFRICAN_RECORD_ID,
@@ -88,7 +88,7 @@ averaging across held-out-country folds).
 
 Downloaded automatically by `scripts/fetch_checkpoints.py` /
 `scripts/download_weights.sh` - see
-https://github.com/PaulOkwija/US_standard_plane_classification.
+https://github.com/PaulOkwija/OBS_Ultrasound_standard_plane_classification.
 
 Training data: see `Okwija/afro-fetalnet-data` (CC BY 4.0, re-hosted from
 Zenodo records 3904280 and 7540448).
