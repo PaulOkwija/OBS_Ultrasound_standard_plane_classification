@@ -1,0 +1,163 @@
+# Experiment matrix
+# Each entry defines a named experiment that scripts/train.py can run by name
+# train_data: "fetal" | "african" | "combined"
+# test_data:  "fetal_test" | "african_test" | "both"
+
+experiments:
+
+  # Baseline
+  baseline_fetal:
+    description: "Train and evaluate on Fetal DB only (pre-split train/val/test)"
+    model: "efficientnet_b0"
+    train_data: "fetal"
+    test_data: "fetal_test"
+    use_clahe: false
+    tags: ["baseline", "fetal"]
+
+  baseline_fetal_clahe:
+    description: "Same as baseline_fetal but with conditional CLAHE preprocessing"
+    model: "efficientnet_b0"
+    train_data: "fetal"
+    test_data: "fetal_test"
+    use_clahe: true
+    tags: ["baseline", "fetal", "clahe"]
+
+  baseline_african:
+    description: "Train and evaluate on African dataset only (4 countries train, Malawi test)"
+    model: "efficientnet_b0"
+    train_data: "african"
+    test_data: "african_test"
+    use_clahe: false
+    tags: ["baseline", "african"]
+
+  baseline_african_clahe:
+    description: "Same as baseline_african but with conditional CLAHE"
+    model: "efficientnet_b0"
+    train_data: "african"
+    test_data: "african_test"
+    use_clahe: true
+    tags: ["baseline", "african", "clahe"]
+
+  baseline_fetal_3c:
+    description: "Train on Fetal DB - 3 standard classes only (brain, femur, abdomen)"
+    model: "efficientnet_b0"
+    train_data: "fetal"
+    test_data: "fetal_test"
+    num_classes: 3
+    classes: ["brain", "femur", "abdomen"]
+    use_clahe: false
+    tags: ["baseline", "fetal", "3class"]
+
+  baseline_fetal_3c_clahe:
+    description: "Train on Fetal DB - 3 classes + conditional CLAHE"
+    model: "efficientnet_b0"
+    train_data: "fetal"
+    test_data: "fetal_test"
+    num_classes: 3
+    classes: ["brain", "femur", "abdomen"]
+    use_clahe: true
+    tags: ["baseline", "fetal", "3class", "clahe"]
+
+  # Model Comparison
+  model_comparison:
+    description: "Compare all 8 models on Fetal DB, measure FPS"
+    models: ["mobilenetv2", "mobilenetv3_small", "efficientnet_b0",
+             "efficientnet_b2", "resnet50", "densenet169", "xception", "convnext_tiny"]
+    train_data: "fetal"
+    test_data: "fetal_test"
+    use_clahe: false
+    tags: ["model_comparison"]
+
+  model_comparison_clahe:
+    description: "Same model comparison but with conditional CLAHE"
+    models: ["mobilenetv2", "mobilenetv3_small", "efficientnet_b0",
+             "efficientnet_b2", "resnet50", "densenet169", "xception", "convnext_tiny"]
+    train_data: "fetal"
+    test_data: "fetal_test"
+    use_clahe: true
+    tags: ["model_comparison", "clahe"]
+
+  # Domain Shift Analysis
+  domain_shift_zero_shot:
+    description: "Train on Fetal DB only, evaluate on African test set (Malawi) - zero-shot transfer"
+    model: "efficientnet_b0"
+    train_data: "fetal"
+    test_data: "african_test"
+    use_clahe: false
+    tags: ["domain_shift", "zero_shot"]
+
+  domain_shift_zero_shot_clahe:
+    description: "Same zero-shot transfer with conditional CLAHE on both datasets"
+    model: "efficientnet_b0"
+    train_data: "fetal"
+    test_data: "african_test"
+    use_clahe: true
+    tags: ["domain_shift", "zero_shot", "clahe"]
+
+  domain_shift_combined:
+    description: "Train on Fetal + African (4 countries), test on both held-out sets"
+    model: "efficientnet_b0"
+    train_data: "combined"
+    test_data: "both"
+    use_clahe: false
+    tags: ["domain_shift", "combined"]
+
+  domain_shift_combined_clahe:
+    description: "Same combined training with conditional CLAHE"
+    model: "efficientnet_b0"
+    train_data: "combined"
+    test_data: "both"
+    use_clahe: true
+    tags: ["domain_shift", "combined", "clahe"]
+
+  # Transfer Learning
+  transfer_learning:
+    description: "Fine-tune Fetal-pretrained model on African train set, test on Malawi"
+    model: "efficientnet_b0"
+    pretrained_from: "baseline_fetal"
+    train_data: "african"
+    test_data: "african_test"
+    patients_sweep: [2, 4, 6, 8, 10, 12]
+    fine_tune_layers: 4
+    use_clahe: false
+    tags: ["transfer_learning"]
+
+  transfer_learning_clahe:
+    description: "Same transfer learning with conditional CLAHE"
+    model: "efficientnet_b0"
+    pretrained_from: "baseline_fetal_clahe"
+    train_data: "african"
+    test_data: "african_test"
+    patients_sweep: [2, 4, 6, 8, 10, 12]
+    fine_tune_layers: 4
+    use_clahe: true
+    tags: ["transfer_learning", "clahe"]
+
+  transfer_learning_layers_ablation:
+    description: "Ablation: how many fine-tuned layers matter? Train combined, test African"
+    model: "efficientnet_b0"
+    pretrained_from: "baseline_fetal"
+    train_data: "combined"
+    test_data: "african_test"
+    fine_tune_layers: [1, 2, 4, 8, -1]
+    use_clahe: false
+    tags: ["transfer_learning", "ablation"]
+
+  # Leave-One-Out (Malawi is already held out by design)
+  loco_african:
+    description: "Train on Fetal + 4 African countries, test on held-out Malawi - generalisation check"
+    model: "efficientnet_b0"
+    pretrained_from: "baseline_fetal"
+    train_data: "combined"
+    test_data: "african_test"
+    use_clahe: false
+    tags: ["loco", "generalisation"]
+
+  loco_african_clahe:
+    description: "Same LOCO experiment with conditional CLAHE"
+    model: "efficientnet_b0"
+    pretrained_from: "baseline_fetal_clahe"
+    train_data: "combined"
+    test_data: "african_test"
+    use_clahe: true
+    tags: ["loco", "generalisation", "clahe"]

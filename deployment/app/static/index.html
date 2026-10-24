@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Afro-FetalNet Inference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f5f5f7;
+      --surface:   #ffffff;
+      --surface2:  #ebebeb;
+      --border:    #d2d2d7;
+      --accent:    #0066cc;
+      --accent2:   #ff9500;
+      --text:      #1d1d1f;
+      --muted:     #86868b;
+      --muted2:    #515154;
+      --success:   #34c759;
+      --error:     #ff3b30;
+      --radius:    6px;
+      --mono:      'JetBrains Mono', monospace;
+      --display:   'Syne', sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.02) 2px,
+        rgba(0,0,0,0.02) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Layout */
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 28px 0 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      animation: fadeDown 0.5s ease both;
+    }
+
+    .logo {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .logo-mark {
+      width: 28px; height: 28px;
+      background: var(--accent);
+      clip-path: polygon(0 100%, 50% 0, 100% 100%);
+      flex-shrink: 0;
+      position: relative;
+      top: 4px;
+    }
+
+    .logo-text {
+      font-family: var(--display);
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: var(--muted2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.error  { background: var(--error); }
+
+    /* Main grid */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      padding: 24px 0;
+    }
+
+    @media (max-width: 780px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    /* Panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeUp 0.5s ease both;
+    }
+    .panel:nth-child(2) { animation-delay: 0.07s; }
+    .panel:nth-child(3) { animation-delay: 0.14s; }
+
+    .panel-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-title {
+      font-family: var(--display);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted2);
+    }
+
+    .panel-body { padding: 18px; }
+
+    /* Model selector */
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted2);
+      margin-bottom: 6px;
+    }
+
+    select, input[type=number] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      appearance: none;
+      transition: border-color 0.2s;
+      cursor: pointer;
+    }
+    select:focus, input[type=number]:focus {
+      border-color: var(--accent);
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      background: var(--surface2);
+    }
+
+    .dropzone:hover, .dropzone.drag-over {
+      border-color: var(--accent);
+      background: rgba(0,102,204,0.05);
+    }
+
+    .dropzone input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon {
+      width: 40px; height: 40px;
+      margin: 0 auto 12px;
+      opacity: 0.3;
+    }
+
+    .drop-label {
+      font-size: 12px;
+      color: var(--muted2);
+      line-height: 1.8;
+    }
+
+    .drop-label strong {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Preview grid */
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .thumb {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    .thumb img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .thumb .remove {
+      position: absolute;
+      top: 3px; right: 3px;
+      width: 16px; height: 16px;
+      background: rgba(255,255,255,0.9);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px;
+      color: var(--muted2);
+      opacity: 0;
+      transition: opacity 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+    .thumb:hover .remove { opacity: 1; }
+
+    /* Run button */
+    .btn-run {
+      width: 100%;
+      margin-top: 16px;
+      padding: 13px;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--display);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-run:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .btn-run:active:not(:disabled) { transform: translateY(0); }
+    .btn-run:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-run .spinner {
+      display: none;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+    .btn-run.loading .btn-label { display: none; }
+    .btn-run.loading .spinner    { display: block; }
+
+    /* Results panel */
+    .results-area {
+      min-height: 300px;
+      position: relative;
+    }
+
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .empty-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 24px);
+      gap: 5px;
+      margin-bottom: 4px;
+    }
+
+    .empty-cell {
+      height: 24px;
+      background: var(--border);
+      border-radius: 3px;
+      opacity: 0.5;
+    }
+
+    .result-card {
+      margin-bottom: 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeUp 0.3s ease both;
+    }
+
+    .result-card-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .result-thumb {
+      width: 36px; height: 36px;
+      border-radius: 3px;
+      object-fit: cover;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .result-filename {
+      font-size: 11px;
+      color: var(--muted2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .result-top-label {
+      font-family: var(--display);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+
+    .result-bars { padding: 12px 14px; }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 52px;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .bar-row:last-child { margin-bottom: 0; }
+
+    .bar-label {
+      font-size: 11px;
+      color: var(--muted2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bar-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0;
+      transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .bar-fill.rank-2 { background: var(--muted2); }
+    .bar-fill.rank-3, .bar-fill.rank-4, .bar-fill.rank-5 { background: var(--muted); }
+
+    .bar-conf {
+      font-size: 11px;
+      color: var(--muted2);
+      text-align: right;
+    }
+    .bar-conf.top { color: var(--accent); font-weight: 500; }
+
+    /* Error toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--error);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--error);
+      max-width: 340px;
+      z-index: 1000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Footer */
+    footer {
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .footer-right { display: flex; gap: 18px; }
+    .footer-right a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .footer-right a:hover { color: var(--accent); }
+
+    /* Tag badge */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+      background: rgba(0,102,204,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(0,102,204,0.2);
+    }
+
+    /* Model info strip */
+    .model-info {
+      display: flex;
+      gap: 16px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 14px;
+      font-size: 11px;
+      color: var(--muted2);
+      flex-wrap: wrap;
+    }
+
+    .model-info-item strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <span class="logo-text">Afro<span>-</span>FetalNet</span>
+    </div>
+    <nav style="display:flex;gap:20px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;">
+      <a href="/" style="color:var(--accent);text-decoration:none;">Images</a>
+      <a href="/video" style="color:var(--muted2);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted2)'">Video</a>
+      <a href="/docs" target="_blank" style="color:var(--muted2);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted2)'">API</a>
+    </nav>
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main>
+
+    <!-- Left: Controls -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <!-- Model config panel -->
+      <div class="panel" style="animation-delay:0s">
+        <div class="panel-header">
+          <span class="panel-title">Model Config</span>
+          <span class="badge">inference</span>
+        </div>
+        <div class="panel-body">
+
+          <div class="field">
+            <label>Model</label>
+            <select id="modelSelect">
+              <option value="">Select a model</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Version</label>
+            <select id="versionSelect">
+              <option value="latest">latest</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <div class="field" style="margin:0">
+              <label>Top K</label>
+              <input type="number" id="topK" value="5" min="1" max="100"/>
+            </div>
+            <div class="field" style="margin:0">
+              <label>Threshold</label>
+              <input type="number" id="threshold" value="0.0" min="0" max="1" step="0.01"/>
+            </div>
+          </div>
+
+          <div id="modelInfoStrip" style="display:none; margin-top:14px;"></div>
+        </div>
+      </div>
+
+      <!-- Upload panel -->
+      <div class="panel" style="animation-delay:0.07s">
+        <div class="panel-header">
+          <span class="panel-title">Upload Images</span>
+          <span id="fileCount" style="font-size:10px; color:var(--muted2);">0 files</span>
+        </div>
+        <div class="panel-body">
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept="image/*" multiple/>
+            <svg class="drop-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="8" width="32" height="24" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="14" cy="17" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M4 28l9-8 6 6 5-5 12 9" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <div class="drop-label">
+              <strong>Drop images here</strong><br>
+              or click to browse<br>
+              <span style="font-size:10px; opacity:0.6;">JPG - PNG - BMP - WEBP</span>
+            </div>
+          </div>
+
+          <div class="preview-grid" id="previewGrid"></div>
+
+          <button class="btn-run" id="runBtn" disabled>
+            <span class="btn-label">Run Inference</span>
+            <div class="spinner"></div>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right: Results -->
+    <div class="panel" style="animation-delay:0.14s; align-self:start;">
+      <div class="panel-header">
+        <span class="panel-title">Results</span>
+        <span id="resultCount" style="font-size:10px; color:var(--muted2);"></span>
+      </div>
+      <div class="panel-body">
+        <div class="results-area" id="resultsArea">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-grid">
+              <div class="empty-cell"></div><div class="empty-cell" style="opacity:.3"></div><div class="empty-cell" style="opacity:.15"></div>
+              <div class="empty-cell" style="opacity:.3"></div><div class="empty-cell"></div><div class="empty-cell" style="opacity:.3"></div>
+              <div class="empty-cell" style="opacity:.15"></div><div class="empty-cell" style="opacity:.3"></div><div class="empty-cell"></div>
+            </div>
+            Upload images and run inference to see predictions
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <span>Afro-FetalNet - PyTorch + FastAPI</span>
+    <div class="footer-right">
+      <a href="/docs" target="_blank">API Docs</a>
+      <a href="/health" target="_blank">Health</a>
+    </div>
+  </footer>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';  // same origin
+
+  // State
+  let files = [];
+  let availableModels = [];
+
+  // DOM refs
+  const modelSelect   = document.getElementById('modelSelect');
+  const versionSelect = document.getElementById('versionSelect');
+  const topKInput     = document.getElementById('topK');
+  const threshInput   = document.getElementById('threshold');
+  const dropzone      = document.getElementById('dropzone');
+  const fileInput     = document.getElementById('fileInput');
+  const previewGrid   = document.getElementById('previewGrid');
+  const fileCountEl   = document.getElementById('fileCount');
+  const runBtn        = document.getElementById('runBtn');
+  const resultsArea   = document.getElementById('resultsArea');
+  const emptyState    = document.getElementById('emptyState');
+  const resultCount   = document.getElementById('resultCount');
+  const statusDot     = document.getElementById('statusDot');
+  const statusText    = document.getElementById('statusText');
+  const modelInfoStrip= document.getElementById('modelInfoStrip');
+
+  // Health check & model load
+  async function init() {
+    try {
+      const r = await fetch(`${API}/health`);
+      if (r.ok) {
+        statusDot.className  = 'status-dot online';
+        statusText.textContent = 'Online';
+      } else throw new Error();
+    } catch {
+      statusDot.className  = 'status-dot error';
+      statusText.textContent = 'Offline';
+    }
+
+    try {
+      const r = await fetch(`${API}/api/v1/models/available`);
+      const data = await r.json();
+      availableModels = data.models || [];
+      populateModelSelect();
+    } catch {
+      showToast('Could not fetch model list from API.');
+    }
+  }
+
+  function populateModelSelect() {
+    const names = [...new Set(availableModels.map(m => m.name))];
+    modelSelect.innerHTML = '<option value="">Select a model</option>';
+    names.forEach(n => {
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      modelSelect.appendChild(opt);
+    });
+  }
+
+  modelSelect.addEventListener('change', () => {
+    const name = modelSelect.value;
+    versionSelect.innerHTML = '<option value="latest">latest</option>';
+    modelInfoStrip.style.display = 'none';
+
+    if (!name) return;
+
+    const versions = availableModels
+      .filter(m => m.name === name)
+      .map(m => m.version)
+      .sort()
+      .reverse();
+
+    versions.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = v;
+      versionSelect.appendChild(opt);
+    });
+
+    updateModelInfo(name, 'latest');
+    updateRunBtn();
+  });
+
+  versionSelect.addEventListener('change', () => {
+    updateModelInfo(modelSelect.value, versionSelect.value);
+  });
+
+  function updateModelInfo(name, version) {
+    const entry = availableModels.find(m =>
+      m.name === name && (version === 'latest' || m.version === version)
+    ) || availableModels.find(m => m.name === name);
+
+    if (!entry) return;
+    const cfg = entry.config || {};
+    const numClasses = cfg.num_classes || (cfg.classes || []).length || '-';
+    const arch = cfg.architecture || cfg.format || '-';
+    const loaded = entry.loaded ? '<span style="color:var(--success)">loaded</span>' : '<span style="color:var(--muted)">not loaded</span>';
+
+    modelInfoStrip.style.display = 'flex';
+    modelInfoStrip.innerHTML = `
+      <div class="model-info">
+        <span class="model-info-item"><strong>${entry.name}</strong> / ${entry.version}</span>
+        <span class="model-info-item">arch: <strong>${arch}</strong></span>
+        <span class="model-info-item">classes: <strong>${numClasses}</strong></span>
+        <span class="model-info-item">${loaded}</span>
+      </div>`;
+  }
+
+  // File handling
+  fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    addFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')));
+  });
+
+  function addFiles(newFiles) {
+    newFiles.forEach(f => {
+      if (!files.find(x => x.name === f.name && x.size === f.size)) {
+        files.push(f);
+        addThumb(f);
+      }
+    });
+    fileCountEl.textContent = `${files.length} file${files.length !== 1 ? 's' : ''}`;
+    updateRunBtn();
+  }
+
+  function addThumb(file) {
+    const url  = URL.createObjectURL(file);
+    const div  = document.createElement('div');
+    div.className = 'thumb';
+    div.dataset.name = file.name;
+    div.innerHTML = `
+      <img src="${url}" alt="${file.name}"/>
+      <button class="remove" title="Remove">x</button>`;
+    div.querySelector('.remove').addEventListener('click', e => {
+      e.stopPropagation();
+      files = files.filter(f => !(f.name === file.name && f.size === file.size));
+      div.remove();
+      fileCountEl.textContent = `${files.length} file${files.length !== 1 ? 's' : ''}`;
+      updateRunBtn();
+    });
+    previewGrid.appendChild(div);
+  }
+
+  function updateRunBtn() {
+    runBtn.disabled = !(files.length > 0 && modelSelect.value);
+  }
+
+  // Inference
+  runBtn.addEventListener('click', async () => {
+    if (!files.length || !modelSelect.value) return;
+
+    runBtn.classList.add('loading');
+    runBtn.disabled = true;
+    clearResults();
+
+    const model   = modelSelect.value;
+    const version = versionSelect.value || 'latest';
+    const topK    = topKInput.value;
+    const thresh  = threshInput.value;
+
+    try {
+      let results = [];
+
+      if (files.length === 1) {
+        // Single predict
+        const fd = new FormData();
+        fd.append('file', files[0]);
+        const url = `${API}/api/v1/inference/predict?model_name=${model}&model_version=${version}&top_k=${topK}&threshold=${thresh}`;
+        const r   = await fetch(url, { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        results = [{ filename: files[0].name, predictions: data.predictions, file: files[0] }];
+      } else {
+        // Batch predict
+        const fd = new FormData();
+        files.forEach(f => fd.append('files', f));
+        const url = `${API}/api/v1/batch/predict?model_name=${model}&model_version=${version}&top_k=${topK}&threshold=${thresh}`;
+        const r   = await fetch(url, { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        results = data.results.map(res => ({
+          ...res,
+          file: files.find(f => f.name === res.filename)
+        }));
+      }
+
+      renderResults(results);
+    } catch (err) {
+      showToast(`Inference failed: ${err.message}`);
+    } finally {
+      runBtn.classList.remove('loading');
+      runBtn.disabled = false;
+    }
+  });
+
+  // Render results
+  function clearResults() {
+    emptyState.style.display = 'flex';
+    Array.from(resultsArea.querySelectorAll('.result-card')).forEach(c => c.remove());
+    resultCount.textContent = '';
+  }
+
+  function renderResults(results) {
+    emptyState.style.display = 'none';
+    resultCount.textContent = `${results.length} image${results.length !== 1 ? 's' : ''}`;
+
+    results.forEach((res, i) => {
+      const card   = document.createElement('div');
+      card.className = 'result-card';
+      card.style.animationDelay = `${i * 0.05}s`;
+
+      const topPred = res.predictions && res.predictions[0];
+      const thumbSrc = res.file ? URL.createObjectURL(res.file) : '';
+
+      card.innerHTML = `
+        <div class="result-card-header">
+          ${thumbSrc ? `<img class="result-thumb" src="${thumbSrc}" alt=""/>` : ''}
+          <span class="result-filename">${res.filename || 'image'}</span>
+          ${topPred ? `<span class="result-top-label">${topPred.label}</span>` : '<span style="font-size:11px;color:var(--error)">no result</span>'}
+        </div>
+        <div class="result-bars">
+          ${(res.predictions || []).map((p, rank) => `
+            <div class="bar-row">
+              <span class="bar-label" title="${p.label}">${p.label}</span>
+              <div class="bar-track">
+                <div class="bar-fill rank-${rank+1}" data-width="${(p.confidence * 100).toFixed(1)}"></div>
+              </div>
+              <span class="bar-conf ${rank === 0 ? 'top' : ''}">${(p.confidence * 100).toFixed(1)}%</span>
+            </div>`).join('')}
+          ${res.error ? `<div style="color:var(--error);font-size:11px;">${res.error}</div>` : ''}
+        </div>`;
+
+      resultsArea.appendChild(card);
+
+      // Animate bars after paint
+      requestAnimationFrame(() => {
+        card.querySelectorAll('.bar-fill').forEach(bar => {
+          bar.style.width = bar.dataset.width + '%';
+        });
+      });
+    });
+  }
+
+  // Toast
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 4000);
+  }
+
+  // Boot
+  init();
+</script>
+</body>
+</html>

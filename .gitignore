@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+
+# Environments
+.env
+.venv/
+venv/
+env/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Data (re-created by modelling/scripts/prepare_datasets.py)
+/modelling/data/
+
+# Model weights (hosted on Hugging Face, see docs/REPRODUCING.md)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+/modelling/checkpoints/
+# Exception: the small demo model bundled with the inference server
+!/deployment/model_registry/efficientnet_b0/v1/model.pt
+
+# Experiment outputs
+/modelling/results/
+/modelling/docs/
+logs/
+runs/
+wandb/
+mlruns/
+*.log
+*.zip

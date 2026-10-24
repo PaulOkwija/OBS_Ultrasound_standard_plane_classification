@@ -1,0 +1,70 @@
+# Base configuration for all experiments
+project_name: "fetal-african-ai"
+random_seed: 42
+
+data:
+  fetal_db_dir: "data/fetal_db"                # Fetal DB root (train/val/test pre-split)
+  african_dir: "data/african"                  # African root (train/val/test pre-split)
+  classes: ["abdomen", "brain", "femur", "other"]  # alphabetical - matches checkpoint folder iteration order
+  num_classes: 4
+  include_other_class: true
+  image_size: 224
+  # No val_split / test_split - splits are pre-built by prepare_datasets.py
+
+preprocessing:
+  use_clahe: false              # conditional CLAHE - only applied to low-contrast images
+  clahe_clip_limit: 2.0         # sweet spot from analysis
+  clahe_tile_size: [8, 8]
+  contrast_threshold: 35        # images below this contrast value get CLAHE applied
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+  remove_headers: true          # crop US machine overlays
+
+augmentation:
+  train:
+    random_horizontal_flip: 0.5
+    random_rotation: 15
+    random_brightness_contrast: 0.2
+    random_crop_scale: [0.8, 1.0]
+    coarse_dropout: 0.1
+  val:
+    none: true
+
+training:
+  batch_size: 32
+  num_epochs: 50
+  optimizer: "adam"
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  scheduler: "cosine"           # cosine | step | exponential
+  early_stopping_patience: 10
+  loss: "cross_entropy"         # cross_entropy | focal | weighted_ce
+  num_workers: 4
+  mixed_precision: true
+
+model:
+  architecture: "efficientnet_b0"
+  pretrained: true
+  freeze_backbone: false
+  fine_tune_layers: -1          # -1 = all, N = last N layers
+  dropout: 0.3
+  mlp_head: false               # true = 2-layer MLP head; better for frozen backbone
+
+transfer_learning:
+  source: "fetal_full"          # pretrain on full Fetal DB, fine-tune on African
+  fine_tune_layers: 4
+  fine_tune_lr: 0.00005
+  fine_tune_epochs: 20
+  patients_per_country: [2, 4, 6, 8, 10, 12]
+
+logging:
+  tracker: "wandb"              # wandb | mlflow | both | none
+  log_every_n_steps: 10
+  save_top_k: 3
+  checkpoint_dir: "checkpoints"
+
+evaluation:
+  metrics: ["accuracy", "auc", "f1", "pr_auc", "precision", "recall", "fps"]
+  fps_batch_size: 1
+  fps_warmup_runs: 10
+  fps_eval_runs: 100

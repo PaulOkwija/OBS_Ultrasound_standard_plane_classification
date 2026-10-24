@@ -1,0 +1,39 @@
+services:
+  afro-fetalnet-api:
+    build: .
+    image: afro-fetalnet-api:latest
+    container_name: afro-fetalnet-api
+    ports:
+      - "8000:8000"
+      - "5005:5005/udp"   # live video frames from sender.py
+    volumes:
+      # Mount your local model registry into the container (read-only)
+      - ./model_registry:/app/model_registry:ro
+      # Optional: mount a local images folder for directory-based batch inference
+      - ./data:/app/data:ro
+    environment:
+      - MODEL_REGISTRY_DIR=model_registry
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-}
+      - TOP_K=${TOP_K:-5}
+      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.0}
+      - IMAGE_SIZE=${IMAGE_SIZE:-224}
+      - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-64}
+    restart: unless-stopped
+    healthcheck:
+      # python:slim has no curl, so probe /health with the standard library
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Optional: GPU-enabled variant (requires nvidia-container-toolkit)
+  # afro-fetalnet-api-gpu:
+  #   extends: afro-fetalnet-api
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]

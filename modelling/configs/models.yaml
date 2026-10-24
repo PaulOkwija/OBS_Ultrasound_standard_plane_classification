@@ -1,0 +1,49 @@
+# Model zoo - all architectures evaluated in the comparison experiment
+models:
+  mobilenetv2:
+    timm_name: "mobilenetv2_100"
+    params_m: 3.4
+    notes: "Lightest, real-time capable"
+    target: "video"
+
+  mobilenetv3_small:
+    timm_name: "mobilenetv3_small_100"
+    params_m: 2.5
+    notes: "Fastest inference"
+    target: "video"
+
+  efficientnet_b0:
+    timm_name: "efficientnet_b0"
+    params_m: 5.3
+    notes: "Best accuracy/efficiency frontier - primary candidate"
+    target: "edge"
+
+  efficientnet_b2:
+    timm_name: "efficientnet_b2"
+    params_m: 9.1
+    notes: "Higher accuracy, still lightweight"
+    target: "server"
+
+  resnet50:
+    timm_name: "resnet50"
+    params_m: 25.6
+    notes: "Strong baseline"
+    target: "server"
+
+  densenet169:
+    timm_name: "densenet169"
+    params_m: 14.1
+    notes: "Reference from Burgos et al. 2020"
+    target: "server"
+
+  xception:
+    timm_name: "xception"
+    params_m: 22.9
+    notes: "Reference from Nidhi & Kovoor 2025"
+    target: "server"
+
+  convnext_tiny:
+    timm_name: "convnext_tiny"
+    params_m: 28.6
+    notes: "Modern CNN, strong accuracy"
+    target: "server"

@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Afro-FetalNet Live Video</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f5f5f7;
+      --surface:  #ffffff;
+      --surface2: #ebebeb;
+      --border:   #d2d2d7;
+      --accent:   #0066cc;
+      --text:     #1d1d1f;
+      --muted:    #86868b;
+      --muted2:   #515154;
+      --mono:     'JetBrains Mono', monospace;
+      --display:  'Syne', sans-serif;
+      --low:      #ff3b30;
+      --mid:      #ff9500;
+      --high:     #34c759;
+      --low-bg:   rgba(255,59,48,0.15);
+      --mid-bg:   rgba(255,149,0,0.15);
+      --high-bg:  rgba(52,199,89,0.15);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* scanline */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 28px 0 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: baseline; gap: 10px; }
+    .logo-mark {
+      width: 28px; height: 28px;
+      background: var(--accent);
+      clip-path: polygon(0 100%, 50% 0, 100% 100%);
+      flex-shrink: 0; position: relative; top: 4px;
+    }
+    .logo-text { font-family: var(--display); font-size: 18px; font-weight: 800; letter-spacing: -0.03em; }
+    .logo-text span { color: var(--accent); }
+    nav { display: flex; gap: 20px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+    nav a { color: var(--muted2); text-decoration: none; transition: color 0.2s; }
+    nav a:hover, nav a.active { color: var(--accent); }
+
+    /* Main grid */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+      padding: 24px 0;
+      align-items: start;
+    }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+    /* Panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-title {
+      font-family: var(--display); font-size: 11px; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted2);
+    }
+    .panel-body { padding: 18px; }
+
+    /* Upload zone (shown before video is loaded) */
+    #uploadZone {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: var(--surface2);
+      border: 1.5px dashed var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--muted2);
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #uploadZone:hover {
+      border-color: var(--accent);
+      background: rgba(0,102,204,0.05);
+    }
+    #uploadZone svg { opacity: 0.3; }
+
+    /* Video container (hidden until video loaded) */
+    #videoContainer {
+      display: none;
+      position: relative;
+      background: #000;
+      border-radius: 6px;
+      overflow: hidden;
+      line-height: 0; /* removes gap under video */
+    }
+
+    #videoEl {
+      width: 100%;
+      display: block;
+      max-height: 540px;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* hidden canvas - off screen */
+    #frameCanvas {
+      position: absolute;
+      top: -9999px; left: -9999px;
+      pointer-events: none;
+    }
+
+    /* Overlay label on video */
+    #overlayLabel {
+      position: absolute;
+      top: 14px; left: 14px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 6px;
+      border: 1.5px solid currentColor;
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+      z-index: 10;
+    }
+    #overlayLabel.low  { color: var(--low);  background: var(--low-bg);  border-color: var(--low); }
+    #overlayLabel.mid  { color: var(--mid);  background: var(--mid-bg);  border-color: var(--mid); }
+    #overlayLabel.high { color: var(--high); background: var(--high-bg); border-color: var(--high); }
+
+    .overlay-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+      animation: pulse 1.2s ease infinite;
+    }
+    .overlay-class { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+    .overlay-conf  { font-size: 12px; opacity: 0.85; }
+
+    /* Controls */
+    #videoFileInput { display: none; }
+
+    .controls {
+      display: flex; gap: 8px; margin-top: 14px;
+      align-items: center; flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: 5px;
+      font-family: var(--mono); font-size: 12px;
+      cursor: pointer; border: 1px solid var(--border);
+      transition: all 0.18s; letter-spacing: 0.04em;
+    }
+    .btn-primary {
+      background: var(--accent); color: #ffffff;
+      border-color: var(--accent);
+      font-family: var(--display); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+    .btn-ghost { background: transparent; color: var(--muted2); }
+    .btn-ghost:hover:not(:disabled)  { border-color: var(--muted2); color: var(--text); }
+    .btn-danger { background: transparent; color: var(--low); border-color: rgba(239,68,68,0.3); }
+    .btn-danger:hover:not(:disabled)  { background: var(--low-bg); }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .time-display { font-size: 11px; color: var(--muted2); margin-left: auto; }
+
+    /* Source Toggle */
+    .source-toggle {
+      display: flex; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2px; gap: 2px;
+    }
+    .source-btn {
+      padding: 4px 12px; border-radius: 18px; font-size: 10px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; border: none; background: transparent; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .source-btn.active { background: var(--surface); color: var(--accent); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .live-dot { width: 6px; height: 6px; background: var(--low); border-radius: 50%; display: inline-block; margin-right: 4px; animation: pulse 1s infinite; }
+
+    /* Legend */
+    .legend {
+      display: flex; gap: 14px; flex-wrap: wrap;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      margin-top: 14px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted2); }
+    .legend-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Sidebar fields */
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: block; font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted2); margin-bottom: 6px;
+    }
+    select, input[type=number] {
+      width: 100%; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text); font-family: var(--mono); font-size: 13px;
+      padding: 9px 12px; outline: none; appearance: none;
+      transition: border-color 0.2s;
+    }
+    select:focus, input[type=number]:focus { border-color: var(--accent); }
+    input[type=range] {
+      width: 100%; appearance: none; cursor: pointer;
+      accent-color: var(--accent); background: transparent;
+      height: 4px;
+    }
+
+    /* Stats */
+    .stats {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-top: 0;
+    }
+    .stat-box {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 5px; padding: 10px 12px;
+    }
+    .stat-label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+    .stat-val   { font-family: var(--display); font-size: 20px; font-weight: 700; }
+    .stat-val.green  { color: var(--high); }
+    .stat-val.yellow { color: var(--mid); }
+    .stat-val.red    { color: var(--low); }
+
+    /* Log */
+    .log-list {
+      max-height: 200px; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .log-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+      font-size: 11px; animation: fadeIn 0.2s ease;
+    }
+    .log-item:last-child { border-bottom: none; }
+    .log-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .log-dot.low  { background: var(--low); }
+    .log-dot.mid  { background: var(--mid); }
+    .log-dot.high { background: var(--high); }
+    .log-class      { flex: 1; color: var(--muted2); }
+    .log-class.low  { color: var(--low); }
+    .log-class.mid  { color: var(--mid); }
+    .log-class.high { color: var(--high); }
+    .log-conf { color: var(--muted); font-size: 10px; }
+    .log-time { color: var(--muted); font-size: 10px; }
+    .log-empty { color: var(--muted); font-size: 11px; padding: 20px 0; text-align: center; }
+
+    /* Footer */
+    footer {
+      padding: 16px 0; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .footer-right { display: flex; gap: 18px; }
+    .footer-right a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+    .footer-right a:hover { color: var(--accent); }
+
+    /* Animations */
+    @keyframes pulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.5; transform:scale(0.75); }
+    }
+    @keyframes fadeIn {
+      from { opacity:0; transform:translateX(-6px); }
+      to   { opacity:1; transform:translateX(0); }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <span class="logo-text">Afro<span>-</span>FetalNet</span>
+    </div>
+    <nav>
+      <a href="/">Images</a>
+      <a href="/video" class="active">Video</a>
+      <a href="/docs" target="_blank">API</a>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- Left: video player -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Video Feed</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="source-toggle">
+              <button class="source-btn active" id="srcFile">File</button>
+              <button class="source-btn" id="srcLive"><span class="live-dot"></span>Live</button>
+            </div>
+            <span id="statusPill" style="font-size:10px;color:var(--muted2);letter-spacing:0.06em;">IDLE</span>
+          </div>
+        </div>
+        <div class="panel-body">
+
+          <!-- Upload zone: visible before a video is loaded -->
+          <div id="uploadZone" onclick="document.getElementById('videoFileInput').click()">
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+              <rect x="4" y="12" width="44" height="30" rx="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M33 27l-11 7V20l11 7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span>Click to load a video file</span>
+            <span style="font-size:10px;opacity:0.5;">MP4 - WebM - MOV - AVI</span>
+          </div>
+
+          <!-- Video container: hidden until a file is loaded -->
+          <div id="videoContainer">
+            <video id="videoEl" preload="metadata"></video>
+            <canvas id="frameCanvas"></canvas>
+            <div id="overlayLabel">
+              <div class="overlay-dot"></div>
+              <span class="overlay-class" id="overlayClass">-</span>
+              <span class="overlay-conf"  id="overlayConf">0%</span>
+            </div>
+          </div>
+
+          <input type="file" id="videoFileInput" accept="video/*"/>
+
+          <div class="controls">
+            <button class="btn btn-primary" id="playBtn"  disabled>Play</button>
+            <button class="btn btn-ghost"   id="pauseBtn" disabled>Pause</button>
+            <button class="btn btn-danger"  id="stopBtn"  disabled>Stop</button>
+            <button class="btn btn-ghost"   id="loadBtn">Load video</button>
+            <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+          </div>
+
+          <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--muted)"></div>No plane detected</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--low)"></div>Low (10-40%)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--mid)"></div>Medium (40-70%)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--high)"></div>High (70-100%)</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Config -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">Config</span></div>
+        <div class="panel-body">
+
+          <div class="field">
+            <label>Model</label>
+            <select id="modelSelect">
+              <option value="">- select -</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Version</label>
+            <select id="versionSelect">
+              <option value="latest">latest</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Detection Threshold &nbsp;<span style="color:var(--accent)" id="threshVal">0.40</span></label>
+            <input type="range" id="threshSlider" min="0.05" max="0.95" step="0.05" value="0.40"/>
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:4px;">
+              <span>Sensitive</span><span>Strict</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Run every N frames &nbsp;<span style="color:var(--accent)" id="skipVal">3</span></label>
+            <input type="range" id="skipSlider" min="1" max="30" step="1" value="3"/>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">Live Stats</span></div>
+        <div class="panel-body">
+          <div class="stats">
+            <div class="stat-box">
+              <div class="stat-label">Frames run</div>
+              <div class="stat-val" id="sFrames">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Detections</div>
+              <div class="stat-val green" id="sDetections">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Avg conf</div>
+              <div class="stat-val" id="sAvgConf">-</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Infer/s</div>
+              <div class="stat-val" id="sFPS">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Detection Log</span>
+          <button id="clearLogBtn" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;letter-spacing:0.06em;">CLEAR</button>
+        </div>
+        <div class="panel-body" style="padding:0 18px 14px;">
+          <div class="log-list" id="logList">
+            <div class="log-empty" id="logEmpty">No detections yet</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer>
+    <span>Afro-FetalNet - Video Mode</span>
+    <div class="footer-right">
+      <a href="/">Image Inference</a>
+      <a href="/docs" target="_blank">API Docs</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+const API = '';
+
+// DOM refs
+const uploadZone     = document.getElementById('uploadZone');
+const videoContainer = document.getElementById('videoContainer');
+const videoEl        = document.getElementById('videoEl');
+const frameCanvas    = document.getElementById('frameCanvas');
+const overlayLabel   = document.getElementById('overlayLabel');
+const overlayClass   = document.getElementById('overlayClass');
+const overlayConf    = document.getElementById('overlayConf');
+const videoFileInput = document.getElementById('videoFileInput');
+const playBtn        = document.getElementById('playBtn');
+const pauseBtn       = document.getElementById('pauseBtn');
+const stopBtn        = document.getElementById('stopBtn');
+const loadBtn        = document.getElementById('loadBtn');
+const timeDisplay    = document.getElementById('timeDisplay');
+const statusPill     = document.getElementById('statusPill');
+const modelSelect    = document.getElementById('modelSelect');
+const versionSelect  = document.getElementById('versionSelect');
+const threshSlider   = document.getElementById('threshSlider');
+const threshVal      = document.getElementById('threshVal');
+const skipSlider     = document.getElementById('skipSlider');
+const skipVal        = document.getElementById('skipVal');
+const logList        = document.getElementById('logList');
+const logEmpty       = document.getElementById('logEmpty');
+const clearLogBtn    = document.getElementById('clearLogBtn');
+const srcFile        = document.getElementById('srcFile');
+const srcLive        = document.getElementById('srcLive');
+
+// State
+let sourceMode   = 'file'; // 'file' or 'live'
+let ws           = null;
+let liveImg      = new Image();
+let lastLiveBlob = null;
+let isRunning    = false;
+let rafId        = null;
+let frameCount   = 0;   // frames processed by inference
+let detections   = 0;
+let confSum      = 0;
+let inferCount   = 0;
+let inferStart   = null;
+let pendingInfer = false;  // prevents queuing more than 1 fetch at a time
+let tickCount    = 0;      // every animation frame tick (for skip logic)
+
+// Temporal smoothing
+// Only switch the displayed label once the same class appears in 5 of the
+// last SMOOTH_WINDOW raw model predictions (majority-vote sliding window).
+const SMOOTH_WINDOW    = 9;   // how many recent predictions to consider
+const STABLE_THRESHOLD = 5;   // how many of those must match to trigger switch
+let recentLabels  = [];       // circular buffer of last N raw label strings
+let stableLabel   = null;     // currently displayed (committed) label
+
+// Load models list
+async function loadModels() {
+  try {
+    const r    = await fetch(`${API}/api/v1/models/available`);
+    const data = await r.json();
+    window._models = data.models || [];
+    const names = [...new Set(window._models.map(m => m.name))];
+    modelSelect.innerHTML = '<option value="">- select -</option>';
+    names.forEach(n => {
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      modelSelect.appendChild(o);
+    });
+  } catch { /* server not ready */ }
+}
+
+modelSelect.addEventListener('change', () => {
+  const name = modelSelect.value;
+  versionSelect.innerHTML = '<option value="latest">latest</option>';
+  if (!name) return;
+  (window._models || [])
+    .filter(m => m.name === name)
+    .sort((a,b) => b.version.localeCompare(a.version))
+    .forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.version; o.textContent = m.version;
+      versionSelect.appendChild(o);
+    });
+});
+
+// Sliders
+threshSlider.addEventListener('input', () => {
+  threshVal.textContent = parseFloat(threshSlider.value).toFixed(2);
+});
+skipSlider.addEventListener('input', () => {
+  skipVal.textContent = skipSlider.value;
+});
+
+// File loading
+function openFilePicker() {
+  videoFileInput.value = '';
+  videoFileInput.click();
+}
+
+uploadZone.addEventListener('click', openFilePicker);
+loadBtn.addEventListener('click', openFilePicker);
+
+videoFileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // Stop any running inference first
+  stopAll();
+
+  const url = URL.createObjectURL(file);
+  videoEl.src = url;
+
+  // Show video, hide upload zone
+  uploadZone.style.display    = 'none';
+  videoContainer.style.display = 'block';
+
+  // Enable controls once metadata loads
+  videoEl.onloadedmetadata = () => {
+    playBtn.disabled  = false;
+    pauseBtn.disabled = true;
+    stopBtn.disabled  = false;
+    statusPill.textContent = 'READY';
+    updateTime();
+  };
+
+  videoEl.onerror = () => {
+    statusPill.textContent = 'ERROR';
+    alert('Could not load video. Try a different format (MP4 recommended).');
+  };
+});
+
+// Time display
+function fmt(s) {
+  if (isNaN(s)) return '0:00';
+  return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+}
+function updateTime() {
+  timeDisplay.textContent = `${fmt(videoEl.currentTime)} / ${fmt(videoEl.duration)}`;
+}
+videoEl.addEventListener('timeupdate', updateTime);
+videoEl.addEventListener('ended', () => {
+  stopAll();
+  hideOverlay();
+  statusPill.textContent = 'ENDED';
+  playBtn.disabled  = false;
+  pauseBtn.disabled = true;
+});
+
+// Playback controls
+playBtn.addEventListener('click', () => {
+  if (!modelSelect.value) {
+    alert('Please select a model first.');
+    return;
+  }
+  
+  if (sourceMode === 'file') {
+    videoEl.play();
+  }
+  
+  startInferenceLoop();
+  playBtn.disabled  = true;
+  pauseBtn.disabled = false;
+  statusPill.textContent = 'RUNNING';
+});
+
+pauseBtn.addEventListener('click', () => {
+  videoEl.pause();
+  stopAll();
+  hideOverlay();
+  playBtn.disabled  = false;
+  pauseBtn.disabled = true;
+  statusPill.textContent = 'PAUSED';
+});
+
+stopBtn.addEventListener('click', () => {
+  videoEl.pause();
+  videoEl.currentTime = 0;
+  stopAll();
+  hideOverlay();
+  playBtn.disabled  = false;
+  pauseBtn.disabled = true;
+  statusPill.textContent = 'STOPPED';
+});
+
+// Inference loop
+function startInferenceLoop() {
+  isRunning   = true;
+  tickCount   = 0;
+  inferStart  = performance.now();
+  pendingInfer= false;
+  
+  if (sourceMode === 'file') {
+    rafId = requestAnimationFrame(tick);
+  } else {
+    connectWebSocket();
+  }
+}
+
+function stopAll() {
+  isRunning = false;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (ws) { ws.close(); ws = null; }
+}
+
+function connectWebSocket() {
+  if (ws) ws.close();
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/api/v1/inference/ws-stream`;
+  
+  ws = new WebSocket(wsUrl);
+  ws.binaryType = 'blob';
+  
+  ws.onopen = () => {
+    statusPill.textContent = 'LIVE CONNECTED';
+    statusPill.style.color = 'var(--high)';
+  };
+  
+  ws.onmessage = (event) => {
+    if (!isRunning || sourceMode !== 'live') return;
+    if (pendingInfer) return; // skip if still processing previous
+    
+    const blob = event.data;
+    const url = URL.createObjectURL(blob);
+    
+    liveImg.onload = () => {
+      URL.revokeObjectURL(url);
+      drawLiveFrame();
+      
+      tickCount++;
+      const skip = parseInt(skipSlider.value) || 3;
+      if (tickCount % skip === 0) {
+        pendingInfer = true;
+        sendFrame(blob);
+      }
+    };
+    liveImg.src = url;
+  };
+  
+  ws.onclose = () => {
+    if (isRunning && sourceMode === 'live') {
+      statusPill.textContent = 'LIVE DISCONNECTED';
+      statusPill.style.color = 'var(--low)';
+      // Try to reconnect after a delay
+      setTimeout(connectWebSocket, 2000);
+    }
+  };
+}
+
+function drawLiveFrame() {
+  const W = liveImg.width;
+  const H = liveImg.height;
+  
+  // Show image on screen by drawing it to a temporary canvas or just use an <img>?
+  // The current UI uses a <video> element. We can replace it or overlay a canvas.
+  // Let's use the frameCanvas which is already there, but we need to make it visible.
+  
+  frameCanvas.width  = W;
+  frameCanvas.height = H;
+  const ctx = frameCanvas.getContext('2d');
+  ctx.drawImage(liveImg, 0, 0, W, H);
+  
+  // Make video invisible and canvas visible in live mode
+  videoEl.style.display = 'none';
+  frameCanvas.style.position = 'relative';
+  frameCanvas.style.top = '0';
+  frameCanvas.style.left = '0';
+  frameCanvas.style.width = '100%';
+  frameCanvas.style.display = 'block';
+}
+
+// Source Toggle Logic
+srcFile.addEventListener('click', () => {
+  if (sourceMode === 'file') return;
+  stopAll();
+  sourceMode = 'file';
+  srcFile.classList.add('active');
+  srcLive.classList.remove('active');
+  
+  uploadZone.style.display = 'flex';
+  videoContainer.style.display = 'none';
+  videoEl.style.display = 'block';
+  frameCanvas.style.display = 'none';
+  frameCanvas.style.position = 'absolute';
+  
+  playBtn.disabled = true;
+  pauseBtn.disabled = true;
+  stopBtn.disabled = true;
+  loadBtn.style.display = 'inline-block';
+  statusPill.textContent = 'IDLE';
+  statusPill.style.color = 'var(--muted2)';
+});
+
+srcLive.addEventListener('click', () => {
+  if (sourceMode === 'live') return;
+  stopAll();
+  sourceMode = 'live';
+  srcLive.classList.add('active');
+  srcFile.classList.remove('active');
+  
+  uploadZone.style.display = 'none';
+  videoContainer.style.display = 'block';
+  videoEl.style.display = 'none';
+  frameCanvas.style.display = 'block';
+  frameCanvas.style.position = 'relative';
+  frameCanvas.style.top = '0';
+  frameCanvas.style.left = '0';
+  frameCanvas.style.width = '100%';
+  
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
+  stopBtn.disabled = false;
+  loadBtn.style.display = 'none';
+  statusPill.textContent = 'LIVE READY';
+  statusPill.style.color = 'var(--accent)';
+});
+
+function tick() {
+  if (!isRunning) return;
+  rafId = requestAnimationFrame(tick);
+
+  // Skip frames based on slider
+  tickCount++;
+  const skip = parseInt(skipSlider.value) || 3;
+  if (tickCount % skip !== 0) return;
+
+  // Don't pile up fetches
+  if (pendingInfer) return;
+  if (videoEl.paused || videoEl.ended || videoEl.readyState < 2) return;
+
+  pendingInfer = true;
+  sendFrame();
+}
+
+function sendFrame(inBlob = null) {
+  if (inBlob) {
+    processBlob(inBlob);
+    return;
+  }
+
+  const W = videoEl.videoWidth  || 640;
+  const H = videoEl.videoHeight || 360;
+  frameCanvas.width  = W;
+  frameCanvas.height = H;
+
+  const ctx = frameCanvas.getContext('2d');
+  ctx.drawImage(videoEl, 0, 0, W, H);
+
+  frameCanvas.toBlob(processBlob, 'image/jpeg', 0.85);
+}
+
+async function processBlob(blob) {
+    if (!blob) { pendingInfer = false; return; }
+
+    const model   = modelSelect.value;
+    const version = versionSelect.value || 'latest';
+    const thresh  = parseFloat(threshSlider.value);
+
+    const fd = new FormData();
+    fd.append('file', blob, 'frame.jpg');
+
+    try {
+        const response = await fetch(
+            `${API}/api/v1/inference/predict?model_name=${encodeURIComponent(model)}&model_version=${encodeURIComponent(version)}&top_k=1&threshold=0`,
+            { method: 'POST', body: fd }
+        );
+
+        if (response.ok) {
+            const data = await response.json();
+            const top = data.predictions?.[0];
+
+            inferCount++;
+            frameCount++;
+            updateStats();
+
+            if (top && top.confidence >= thresh) {
+                // Push raw prediction into the sliding window
+                recentLabels.push(top.label);
+                if (recentLabels.length > SMOOTH_WINDOW) recentLabels.shift();
+
+                // Count occurrences of each REAL label
+                const counts = {};
+                for (const lbl of recentLabels) {
+                    if (lbl !== null) counts[lbl] = (counts[lbl] || 0) + 1;
+                }
+                const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                if (entries.length === 0) { pendingInfer = false; return; }
+                const [topLabel, topCount] = entries[0];
+
+                if (topCount >= STABLE_THRESHOLD && topLabel !== stableLabel) {
+                    stableLabel = topLabel;
+                }
+
+                if (stableLabel) {
+                    const tier = getTier(top.confidence);
+                    showOverlay(stableLabel, top.confidence, tier);
+                    detections++;
+                    confSum += top.confidence;
+                    if (topCount === STABLE_THRESHOLD && topLabel === stableLabel) {
+                        logDetection(stableLabel, top.confidence, tier);
+                    }
+                }
+            } else {
+                recentLabels.push(null);
+                if (recentLabels.length > SMOOTH_WINDOW) recentLabels.shift();
+                const nonNullCount = recentLabels.filter(Boolean).length;
+                if (nonNullCount < SMOOTH_WINDOW - STABLE_THRESHOLD) {
+                    stableLabel = null;
+                    hideOverlay();
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Inference fetch error:", err);
+    } finally {
+        pendingInfer = false;
+    }
+}
+
+// Confidence tier
+function getTier(conf) {
+  if (conf >= 0.70) return 'high';
+  if (conf >= 0.40) return 'mid';
+  return 'low';
+}
+
+// Overlay
+function showOverlay(label, conf, tier) {
+  overlayLabel.style.display = 'flex';
+  overlayLabel.className     = tier;
+  overlayClass.textContent   = label;
+  overlayConf.textContent    = (conf * 100).toFixed(1) + '%';
+}
+function hideOverlay() {
+  overlayLabel.style.display = 'none';
+}
+
+// Stats
+function updateStats() {
+  document.getElementById('sFrames').textContent     = frameCount;
+  document.getElementById('sDetections').textContent = detections;
+
+  if (detections > 0) {
+    const avg    = confSum / detections;
+    const tier   = getTier(avg);
+    const avgEl  = document.getElementById('sAvgConf');
+    avgEl.textContent = (avg * 100).toFixed(1) + '%';
+    avgEl.className   = `stat-val ${tier === 'high' ? 'green' : tier === 'mid' ? 'yellow' : 'red'}`;
+  }
+
+  if (inferStart) {
+    const elapsed = (performance.now() - inferStart) / 1000;
+    const fps = elapsed > 0.5 ? (inferCount / elapsed).toFixed(1) : '...';
+    document.getElementById('sFPS').textContent = fps;
+  }
+}
+
+// Detection log
+// Reset smoothing on stop/clear
+function resetSmoothing() {
+  recentLabels = [];
+  stableLabel  = null;
+}
+
+clearLogBtn.addEventListener('click', () => {
+  logList.querySelectorAll('.log-item').forEach(i => i.remove());
+  logEmpty.style.display = 'block';
+  frameCount = detections = inferCount = confSum = 0;
+  inferStart = null;
+  resetSmoothing();
+  updateStats();
+  document.getElementById('sFPS').textContent = '-';
+});
+
+function logDetection(label, conf, tier) {
+  logEmpty.style.display = 'none';
+  const t    = new Date();
+  const time = `${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`;
+  const item = document.createElement('div');
+  item.className = 'log-item';
+  item.innerHTML = `
+    <div class="log-dot ${tier}"></div>
+    <span class="log-class ${tier}">${label}</span>
+    <span class="log-conf">${(conf*100).toFixed(1)}%</span>
+    <span class="log-time">${time}</span>`;
+  logList.insertBefore(item, logList.firstChild);
+  const items = logList.querySelectorAll('.log-item');
+  if (items.length > 60) items[items.length - 1].remove();
+}
+
+// Boot
+loadModels();
+</script>
+</body>
+</html>
